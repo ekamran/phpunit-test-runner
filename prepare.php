@@ -577,7 +577,7 @@ if ( ! empty( $runner_vars['WPT_SSH_CONNECT'] ) ) {
 				. ' --exclude=".github/"'
 				. ' --exclude="tools/"'
 				// Exclude all subdirectories in tests/ except phpunit/.
-				. ' --exclude="tests/*" --include="tests/phpunit/**"'
+				. ' --include="tests/phpunit/" --include="tests/phpunit/**" --exclude="tests/*"'
 				. ' -e "ssh ' . $runner_vars['WPT_SSH_OPTIONS'] . '" '
 				. escapeshellarg( trailingslashit( $runner_vars['WPT_PREPARE_DIR'] ) )
 				. ' ' . escapeshellarg( $runner_vars['WPT_SSH_CONNECT'] . ':' . $runner_vars['WPT_TEST_DIR'] ),
