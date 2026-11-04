@@ -1,6 +1,6 @@
 name: Test the PR 245 action end to end
 
-# Job C: PR 245 action with both fixes plus the prepare.php rsync fix (fork commit bc359c6d).
+# Job D: same as C but on #245 head af97636e (includes WPT_PHPUNIT_ARGS from #358), fork commit d397584e.
 # Earlier runs: job A runs the action from WordPress/phpunit-test-runner#245 (head 43f0f02f) as is; job B runs it with both fixes
 # (fork commit ec0b3620). Both use this runner as the "remote" host: a local SSH server and the runner's MySQL.
 # Throwaway key and database, nothing external.
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  fixes-and-rsync:
+  filter-on-af97636e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -37,8 +37,8 @@ jobs:
           echo "::add-mask::$key"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
-      - name: Run the PR 245 action with both fixes and the rsync fix (bc359c6d)
-        uses: ekamran/phpunit-test-runner/.github/actions/wordpress-host-test@bc359c6d21cb8277bdb4fef559f34266139e227f
+      - name: Run the PR 245 action with both fixes and the rsync fix, on af97636e (d397584e)
+        uses: ekamran/phpunit-test-runner/.github/actions/wordpress-host-test@d397584e77da70ff4f9ab812bef454121f8d82c4
         with:
           remote-test-dir: /tmp/wp-remote
           database-host: localhost
