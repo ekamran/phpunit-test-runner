@@ -1,6 +1,7 @@
 name: Test the PR 245 action end to end
 
-# Job A runs the action from WordPress/phpunit-test-runner#245 (head 43f0f02f) as is; job B runs it with both fixes
+# Job C: PR 245 action with both fixes plus the prepare.php rsync fix (fork commit bc359c6d).
+# Earlier runs: job A runs the action from WordPress/phpunit-test-runner#245 (head 43f0f02f) as is; job B runs it with both fixes
 # (fork commit ec0b3620). Both use this runner as the "remote" host: a local SSH server and the runner's MySQL.
 # Throwaway key and database, nothing external.
 on:
@@ -12,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  pr-head-as-is:
+  fixes-and-rsync:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -36,52 +37,8 @@ jobs:
           echo "::add-mask::$key"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
-      - name: Run the action from PR 245 (head 43f0f02f, as is)
-        uses: martin-helmich/phpunit-test-runner/.github/actions/wordpress-host-test@43f0f02fbe0c7b682ee9e181ae135743bae6aa9f
-        with:
-          remote-test-dir: /tmp/wp-remote
-          database-host: localhost
-          database-user: wptests
-          database-password: wptests
-          database-name: wptests
-          ssh-connect: runner@localhost
-          ssh-private-key: ${{ steps.ssh.outputs.key }}
-          test-filter: 'Tests_Option_Option'
-
-      - name: Show what the run left behind
-        if: always()
-        run: |
-          echo "Remote test dir after cleanup (should be gone):"
-          ls -la /tmp/wp-remote 2>&1 | head -5 || true
-          echo "Prepare dir:"
-          ls /tmp/wp-tests 2>&1 | head -5 || true
-
-  pr-head-with-fixes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Start MySQL and create the test database
-        run: |
-          sudo systemctl start mysql.service
-          mysql -uroot -proot -e "CREATE DATABASE wptests; CREATE USER 'wptests'@'localhost' IDENTIFIED BY 'wptests'; GRANT ALL ON wptests.* TO 'wptests'@'localhost';"
-
-      - name: Start an SSH server and authorize a throwaway key
-        id: ssh
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq openssh-server
-          sudo systemctl start ssh
-          ssh-keygen -t rsa -b 3072 -N '' -f "$RUNNER_TEMP/test_key" -q
-          mkdir -p ~/.ssh
-          chmod go-w ~
-          cat "$RUNNER_TEMP/test_key.pub" >> ~/.ssh/authorized_keys
-          chmod 600 ~/.ssh/authorized_keys
-          key="$(base64 -w0 "$RUNNER_TEMP/test_key")"
-          echo "::add-mask::$key"
-          echo "key=$key" >> "$GITHUB_OUTPUT"
-
-      - name: Run the PR 245 action with both fixes (ec0b3620)
-        uses: ekamran/phpunit-test-runner/.github/actions/wordpress-host-test@ec0b3620edb2a7f9683077d04a6c9ffbc9c7c7bb
+      - name: Run the PR 245 action with both fixes and the rsync fix (bc359c6d)
+        uses: ekamran/phpunit-test-runner/.github/actions/wordpress-host-test@bc359c6d21cb8277bdb4fef559f34266139e227f
         with:
           remote-test-dir: /tmp/wp-remote
           database-host: localhost
