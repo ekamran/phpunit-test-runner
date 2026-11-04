@@ -1,0 +1,104 @@
+name: Runner over SSH copies tests/phpunit
+
+# Runs WordPress/phpunit-test-runner master (5902c15e) the way a host does in SSH mode, with this runner as the
+# "remote" host (local SSH server and the runner's MySQL). Rows: master as is, and master with the rsync rules
+# reordered; single site and multisite. Throwaway key and database, nothing external, no reporting.
+on:
+  push:
+    branches:
+      - test/rsync-tests-phpunit
+
+permissions:
+  contents: read
+
+jobs:
+  ssh-mode:
+    name: rsync ${{ matrix.rsync }}, flavor ${{ matrix.flavor }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        rsync: [ master, fixed ]
+        flavor: [ '0', '1' ]
+    env:
+      WPT_PREPARE_DIR: /tmp/wp-tests
+      WPT_TEST_DIR: /tmp/wp-remote
+      WPT_DB_NAME: wptests
+      WPT_DB_USER: wptests
+      WPT_DB_PASSWORD: wptests
+      WPT_DB_HOST: localhost
+      WPT_SSH_CONNECT: runner@localhost
+    steps:
+      - name: Check out phpunit-test-runner master
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: WordPress/phpunit-test-runner
+          ref: 5902c15e741f06288e7a7830299833e586d811a4
+          persist-credentials: false
+          path: runner
+
+      - name: Reorder the rsync rules
+        if: matrix.rsync == 'fixed'
+        working-directory: runner
+        run: |
+          sed -i 's|--exclude="tests/\*" --include="tests/phpunit/\*\*"|--include="tests/phpunit/" --include="tests/phpunit/**" --exclude="tests/*"|' prepare.php
+          git diff -- prepare.php
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@cf4cade2721270509d5b1c766ab3549210a39a2a # v2.33.0
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Checkout .nvmrc file from wordpress-develop
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: WordPress/wordpress-develop
+          persist-credentials: false
+          path: wordpress-develop
+          sparse-checkout: '.nvmrc'
+          sparse-checkout-cone-mode: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: wordpress-develop/.nvmrc
+
+      - name: Start MySQL and create the test database
+        run: |
+          sudo systemctl start mysql.service
+          mysql -uroot -proot -e "CREATE DATABASE wptests; CREATE USER 'wptests'@'localhost' IDENTIFIED BY 'wptests'; GRANT ALL ON wptests.* TO 'wptests'@'localhost';"
+
+      - name: Start an SSH server and authorize a throwaway key
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openssh-server
+          sudo systemctl start ssh
+          mkdir -p ~/.ssh
+          chmod go-w ~
+          ssh-keygen -t rsa -b 3072 -N '' -f ~/.ssh/id_rsa -q
+          cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          ssh -o StrictHostKeyChecking=no runner@localhost whoami
+
+      - name: rsync version
+        run: rsync --version | head -1
+
+      - name: Prepare
+        working-directory: runner
+        run: php prepare.php
+
+      - name: What reached the test directory
+        run: |
+          echo "tests/ in the test directory:"
+          ls -1 /tmp/wp-remote/tests/ 2>&1 || true
+          echo "tests/ in the prepare directory:"
+          ls -1 /tmp/wp-tests/tests/
+
+      - name: Test
+        working-directory: runner
+        env:
+          WPT_FLAVOR: ${{ matrix.flavor }}
+          WPT_PHPUNIT_ARGS: --filter Tests_Option_Option
+        run: php test.php
